@@ -21,7 +21,6 @@ import (
 	"github.com/goccy/go-json"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/gofrs/flock"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -442,17 +441,6 @@ func lockFilePath(id int64) string {
 	return filepath.Join(tenantDBDir, fmt.Sprintf("%d.lock", id))
 }
 
-// 排他ロックする
-func flockByTenantID(tenantID int64) (io.Closer, error) {
-	p := lockFilePath(tenantID)
-
-	fl := flock.New(p)
-	if err := fl.Lock(); err != nil {
-		return nil, fmt.Errorf("error flock.Lock: path=%s, %w", p, err)
-	}
-	return fl, nil
-}
-
 type TenantsAddHandlerResult struct {
 	Tenant TenantWithBilling `json:"tenant"`
 }
@@ -583,13 +571,6 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 
 		vhsByCompetitionID[vhs.CompetitionID] = append(v, vhs)
 	}
-
-	// player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-	fl, err := flockByTenantID(tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("error flockByTenantID: %w", err)
-	}
-	defer fl.Close()
 
 	scoredPlayerIDss := []struct {
 		PlayerID      string `db:"player_id"`
@@ -1099,12 +1080,9 @@ func competitionScoreHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid CSV headers")
 	}
 
-	// / DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
-	fl, err := flockByTenantID(v.tenantID)
-	if err != nil {
-		return fmt.Errorf("error flockByTenantID: %w", err)
-	}
-	defer fl.Close()
+	tx := tenantDB.MustBeginTx(c.Request().Context(), nil)
+	defer tx.Rollback()
+
 	var rowNum int64
 	playerScoreRows := []PlayerScoreRow{}
 	// 参加者が存在するかどうかでN+1
@@ -1121,7 +1099,7 @@ func competitionScoreHandler(c echo.Context) error {
 			return fmt.Errorf("row must have two columns: %#v", row)
 		}
 		playerID, scoreStr := row[0], row[1]
-		if _, err := retrievePlayer(ctx, tenantDB, playerID); err != nil {
+		if _, err := retrievePlayer(ctx, tx, playerID); err != nil {
 			// 存在しない参加者が含まれている
 			if errors.Is(err, sql.ErrNoRows) {
 				return echo.NewHTTPError(
@@ -1155,7 +1133,7 @@ func competitionScoreHandler(c echo.Context) error {
 		})
 	}
 
-	if _, err := tenantDB.ExecContext(
+	if _, err := tx.ExecContext(
 		ctx,
 		"DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
 		v.tenantID,
@@ -1163,7 +1141,7 @@ func competitionScoreHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Delete player_score: tenantID=%d, competitionID=%s, %w", v.tenantID, competitionID, err)
 	}
-	result, err := tenantDB.NamedExecContext(ctx,
+	result, err := tx.NamedExecContext(ctx,
 		"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)",
 		playerScoreRows,
 	)
@@ -1173,6 +1151,7 @@ func competitionScoreHandler(c echo.Context) error {
 		// だったので、やばいかも？
 		return fmt.Errorf("error ExecContext player_score: %w", err)
 	}
+	tx.Commit()
 
 	return c.JSON(http.StatusOK, SuccessResult{
 		Status: true,
@@ -1213,10 +1192,13 @@ func billingHandler(c echo.Context) error {
 	}
 	tbrs := make([]BillingReport, 0, len(cs))
 
-	reports, err := billingReports(ctx, tenantDB, v.tenantID)
+	tx := tenantDB.MustBeginTx(ctx, nil)
+	defer tx.Rollback()
+	reports, err := billingReports(ctx, tx, v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error billingReports: %w", err)
 	}
+	tx.Commit()
 
 	for _, comp := range cs {
 		report, ok := reports[comp.ID]
@@ -1290,16 +1272,13 @@ func playerHandler(c echo.Context) error {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
 
-	// player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-	fl, err := flockByTenantID(v.tenantID)
-	if err != nil {
-		return fmt.Errorf("error flockByTenantID: %w", err)
-	}
-	defer fl.Close()
+	tx := tenantDB.MustBeginTx(ctx, nil)
+	defer tx.Rollback()
+
 	pss := make([]PlayerScoreRow, 0, len(cs))
 	for _, c := range cs {
 		ps := PlayerScoreRow{}
-		if err := tenantDB.GetContext(
+		if err := tx.GetContext(
 			ctx,
 			&ps,
 			// 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
@@ -1319,7 +1298,7 @@ func playerHandler(c echo.Context) error {
 
 	psds := make([]PlayerScoreDetail, 0, len(pss))
 	for _, ps := range pss {
-		comp, err := retrieveCompetition(ctx, tenantDB, ps.CompetitionID, v.tenantID)
+		comp, err := retrieveCompetition(ctx, tx, ps.CompetitionID, v.tenantID)
 		if err != nil {
 			return fmt.Errorf("error retrieveCompetition: %w", err)
 		}
@@ -1328,6 +1307,8 @@ func playerHandler(c echo.Context) error {
 			Score:            ps.Score,
 		})
 	}
+
+	tx.Commit()
 
 	res := SuccessResult{
 		Status: true,
@@ -1417,14 +1398,11 @@ func competitionRankingHandler(c echo.Context) error {
 		}
 	}
 
-	// player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-	fl, err := flockByTenantID(v.tenantID)
-	if err != nil {
-		return fmt.Errorf("error flockByTenantID: %w", err)
-	}
-	defer fl.Close()
+	tx := tenantDB.MustBeginTx(ctx, nil)
+	defer tx.Rollback()
+
 	pss := []PlayerScoreRow{}
-	if err := tenantDB.SelectContext(
+	if err := tx.SelectContext(
 		ctx,
 		&pss,
 		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
@@ -1442,9 +1420,11 @@ func competitionRankingHandler(c echo.Context) error {
 	}
 
 	var ps []PlayerRow
-	if err := tenantDB.SelectContext(ctx, &ps, "SELECT * FROM player"); err != nil {
+	if err := tx.SelectContext(ctx, &ps, "SELECT * FROM player"); err != nil {
 		return fmt.Errorf("error Select players: %w", err)
 	}
+
+	tx.Commit()
 
 	PlayerRowByPlayerID := make(map[string]PlayerRow, len(ps))
 	for _, p := range ps {
