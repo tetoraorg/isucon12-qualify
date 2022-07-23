@@ -2,7 +2,7 @@
 
 set -e
 
-if [ -s $PROJECT_ROOT/isu$SERVER_NUMBER/isucon.cnf ]; then
-  echo "moving isucon.cnf..."
-  sudo cp $PROJECT_ROOT/isu$SERVER_NUMBER/isucon.cnf /etc/mysql/
+if [ -s $PROJECT_ROOT/isu$SERVER_NUMBER/mysqld.cnf ]; then
+  echo "moving mysqld.cnf..."
+  sudo cp $PROJECT_ROOT/isu$SERVER_NUMBER/mysqld.cnf /etc/mysql/mysql.conf.d
 fi

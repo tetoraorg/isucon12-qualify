@@ -6,4 +6,5 @@ restart-nginx
 restart-mysql && slow-on
 # restart-fluent-bit
 restart-app
+sleep 5
 start-pprof
