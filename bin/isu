@@ -4,6 +4,6 @@ set -ex
 
 restart-nginx
 restart-mysql && slow-on
-restart-fluent-bit
+# restart-fluent-bit
 restart-app
 start-pprof

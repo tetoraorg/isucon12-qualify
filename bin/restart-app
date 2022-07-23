@@ -3,7 +3,7 @@
 set -e
 
 pwd=$PWD
-cd $PROJECT_ROOT/go && go build -o $APP_NAME ./...
+cd $PROJECT_ROOT/go && make isuports
 cd $pwd
 
 sudo systemctl restart $SERVICE_NAME
