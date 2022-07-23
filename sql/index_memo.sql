@@ -1,1 +1,1 @@
-create index idx_tenant_competition_player on visit_history(tenant_id, competition_id, player_id);
+create index idx_tenant_player_competition on visit_history(tenant_id, player_id, competition_id);
