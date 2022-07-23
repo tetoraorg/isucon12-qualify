@@ -218,7 +218,7 @@ func Run() {
 
 // エラー処理関数
 func errorResponseHandler(err error, c echo.Context) {
-	c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
+	// c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
 	var he *echo.HTTPError
 	if errors.As(err, &he) {
 		_ = c.JSON(he.Code, FailureResult{
