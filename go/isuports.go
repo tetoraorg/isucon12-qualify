@@ -699,7 +699,8 @@ func tenantsBillingHandler(c echo.Context) error {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 
-	eg := errgroup.Group{}
+	eg, egCtx := errgroup.WithContext(ctx)
+	limitErr := errors.New("limit exceeded") // tenantBillingsが一定数に達したフラグ
 
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	tenantBillingsMux := sync.Mutex{}
@@ -723,7 +724,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			defer tenantDB.Close()
 			cs := []CompetitionRow{}
 			if err := tenantDB.SelectContext(
-				ctx,
+				egCtx,
 				&cs,
 				"SELECT * FROM competition WHERE tenant_id=?",
 				t.ID,
@@ -732,7 +733,7 @@ func tenantsBillingHandler(c echo.Context) error {
 				return fmt.Errorf("failed to Select competition: %w", err)
 			}
 
-			reports, err := billingReports(ctx, tenantDB, t.ID)
+			reports, err := billingReports(egCtx, tenantDB, t.ID)
 			if err != nil {
 				log.Error("tenantsBillingHandler:", err)
 				return fmt.Errorf("failed to billingReports: %w", err)
@@ -750,14 +751,14 @@ func tenantsBillingHandler(c echo.Context) error {
 			tenantBillingsMux.Lock()
 			tenantBillings = append(tenantBillings, tb)
 			if len(tenantBillings) >= 10 {
-				return nil
+				return limitErr
 			}
 			tenantBillingsMux.Unlock()
 
 			return nil
 		})
 
-		if err := eg.Wait(); err != nil {
+		if err := eg.Wait(); err != nil && !errors.Is(err, limitErr) {
 			return err
 		}
 	}
