@@ -18,8 +18,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/goccy/go-json"
+
 	"github.com/go-sql-driver/mysql"
 	"github.com/gofrs/flock"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -70,6 +73,7 @@ func connectAdminDB() (*sqlx.DB, error) {
 	config.Passwd = getEnv("ISUCON_DB_PASSWORD", "isucon")
 	config.DBName = getEnv("ISUCON_DB_NAME", "isuports")
 	config.ParseTime = true
+	config.InterpolateParams = true
 	dsn := config.FormatDSN()
 	return sqlx.Open("mysql", dsn)
 }
@@ -103,28 +107,11 @@ func createTenantDB(id int64) error {
 
 // システム全体で一意なIDを生成する
 func dispenseID(ctx context.Context) (string, error) {
-	var id int64
-	var lastErr error
-	for i := 0; i < 100; i++ {
-		var ret sql.Result
-		ret, err := adminDB.ExecContext(ctx, "REPLACE INTO id_generator (stub) VALUES (?);", "a")
-		if err != nil {
-			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlock
-				lastErr = fmt.Errorf("error REPLACE INTO id_generator: %w", err)
-				continue
-			}
-			return "", fmt.Errorf("error REPLACE INTO id_generator: %w", err)
-		}
-		id, err = ret.LastInsertId()
-		if err != nil {
-			return "", fmt.Errorf("error ret.LastInsertId: %w", err)
-		}
-		break
+	u, err := uuid.NewRandom()
+	if err != nil {
+		return "", err
 	}
-	if id != 0 {
-		return fmt.Sprintf("%x", id), nil
-	}
-	return "", lastErr
+	return u.String(), nil
 }
 
 // 全APIにCache-Control: privateを設定する
@@ -133,6 +120,23 @@ func SetCacheControlPrivate(next echo.HandlerFunc) echo.HandlerFunc {
 		c.Response().Header().Set(echo.HeaderCacheControl, "private")
 		return next(c)
 	}
+}
+
+type JSONSerializer struct{}
+
+func (j *JSONSerializer) Serialize(c echo.Context, i interface{}, indent string) error {
+	enc := json.NewEncoder(c.Response())
+	return enc.Encode(i)
+}
+
+func (j *JSONSerializer) Deserialize(c echo.Context, i interface{}) error {
+	err := json.NewDecoder(c.Request().Body).Decode(i)
+	if ute, ok := err.(*json.UnmarshalTypeError); ok {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Unmarshal type error: expected=%v, got=%v, field=%v, offset=%v", ute.Type, ute.Value, ute.Field, ute.Offset)).SetInternal(err)
+	} else if se, ok := err.(*json.SyntaxError); ok {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Syntax error: offset=%v, error=%v", se.Offset, se.Error())).SetInternal(err)
+	}
+	return err
 }
 
 // Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
@@ -144,6 +148,7 @@ func Run() {
 	}()
 
 	e := echo.New()
+	e.JSONSerializer = &JSONSerializer{}
 	// TODO: あとできる
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
@@ -546,34 +551,38 @@ type VisitHistoryRow struct {
 type VisitHistorySummaryRow struct {
 	PlayerID     string `db:"player_id"`
 	MinCreatedAt int64  `db:"min_created_at"`
+
+	CompetitionID string `db:"competition_id"`
 }
 
-// TODO: 重い
-// 大会ごとの課金レポートを計算する
-func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID int64, competitonID string) (*BillingReport, error) {
-	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
+// 大会ごとの課金レポートをまとめて計算する
+func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[string]*BillingReport, error) {
+	var reports = make(map[string]*BillingReport)
+
+	var cs []CompetitionRow
+	if err := tenantDB.SelectContext(ctx, &cs, "SELECT * FROM competition"); err != nil {
+		return nil, fmt.Errorf("error Select competitions %w", err)
 	}
 
 	// ランキングにアクセスした参加者のIDを取得する
-	vhs := []VisitHistorySummaryRow{}
+	vhss := []VisitHistorySummaryRow{}
 	if err := adminDB.SelectContext(
 		ctx,
-		&vhs,
-		"SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id",
+		&vhss,
+		"SELECT player_id, competition_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? GROUP BY player_id, competition_id",
 		tenantID,
-		comp.ID,
 	); err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("error Select visit_history: tenantID=%d, competitionID=%s, %w", tenantID, comp.ID, err)
+		return nil, fmt.Errorf("error Select visit_history: tenantID=%d, competitionID, %w", tenantID, err)
 	}
-	billingMap := map[string]string{}
-	for _, vh := range vhs {
-		// competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
-		if comp.FinishedAt.Valid && comp.FinishedAt.Int64 < vh.MinCreatedAt {
-			continue
+
+	vhsByCompetitionID := make(map[string][]VisitHistorySummaryRow)
+	for _, vhs := range vhss {
+		v, ok := vhsByCompetitionID[vhs.CompetitionID]
+		if !ok {
+			v = []VisitHistorySummaryRow{}
 		}
-		billingMap[vh.PlayerID] = "visitor"
+
+		vhsByCompetitionID[vhs.CompetitionID] = append(v, vhs)
 	}
 
 	// player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
@@ -583,42 +592,76 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 	}
 	defer fl.Close()
 
-	// スコアを登録した参加者のIDを取得する
-	scoredPlayerIDs := []string{}
+	scoredPlayerIDss := []struct {
+		PlayerID      string `db:"player_id"`
+		CompetitionID string `db:"competition_id"`
+	}{}
 	if err := tenantDB.SelectContext(
 		ctx,
-		&scoredPlayerIDs,
-		"SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?",
-		tenantID, comp.ID,
+		&scoredPlayerIDss,
+		"SELECT DISTINCT(player_id) AS player_id, competition_id FROM player_score WHERE tenant_id = ?",
+		tenantID,
 	); err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, competitionID=%s, %w", tenantID, competitonID, err)
-	}
-	for _, pid := range scoredPlayerIDs {
-		// スコアが登録されている参加者
-		billingMap[pid] = "player"
+		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, %w", tenantID, err)
 	}
 
-	// 大会が終了している場合のみ請求金額が確定するので計算する
-	var playerCount, visitorCount int64
-	if comp.FinishedAt.Valid {
-		for _, category := range billingMap {
-			switch category {
-			case "player":
-				playerCount++
-			case "visitor":
-				visitorCount++
+	scoredPlayerIDsByCompetitionID := make(map[string][]string)
+	for _, v := range scoredPlayerIDss {
+		ps, ok := scoredPlayerIDsByCompetitionID[v.CompetitionID]
+		if !ok {
+			ps = []string{}
+		}
+
+		scoredPlayerIDsByCompetitionID[v.CompetitionID] = append(ps, v.PlayerID)
+	}
+
+	for _, comp := range cs {
+		// 存在確認はしない
+		vhs := vhsByCompetitionID[comp.ID]
+
+		billingMap := map[string]string{}
+		for _, vh := range vhs {
+			// competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
+			if comp.FinishedAt.Valid && comp.FinishedAt.Int64 < vh.MinCreatedAt {
+				continue
+			}
+			billingMap[vh.PlayerID] = "visitor"
+		}
+
+		// スコアを登録した参加者のIDを取得する
+		// 存在確認はしない
+		scoredPlayerIDs := scoredPlayerIDsByCompetitionID[comp.ID]
+
+		for _, pid := range scoredPlayerIDs {
+			// スコアが登録されている参加者
+			billingMap[pid] = "player"
+		}
+
+		// 大会が終了している場合のみ請求金額が確定するので計算する
+		var playerCount, visitorCount int64
+		if comp.FinishedAt.Valid {
+			for _, category := range billingMap {
+				switch category {
+				case "player":
+					playerCount++
+				case "visitor":
+					visitorCount++
+				}
 			}
 		}
+
+		reports[comp.ID] = &BillingReport{
+			CompetitionID:     comp.ID,
+			CompetitionTitle:  comp.Title,
+			PlayerCount:       playerCount,
+			VisitorCount:      visitorCount,
+			BillingPlayerYen:  100 * playerCount, // スコアを登録した参加者は100円
+			BillingVisitorYen: 10 * visitorCount, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
+			BillingYen:        100*playerCount + 10*visitorCount,
+		}
 	}
-	return &BillingReport{
-		CompetitionID:     comp.ID,
-		CompetitionTitle:  comp.Title,
-		PlayerCount:       playerCount,
-		VisitorCount:      visitorCount,
-		BillingPlayerYen:  100 * playerCount, // スコアを登録した参加者は100円
-		BillingVisitorYen: 10 * visitorCount, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
-		BillingYen:        100*playerCount + 10*visitorCount,
-	}, nil
+
+	return reports, nil
 }
 
 type TenantWithBilling struct {
@@ -632,6 +675,7 @@ type TenantsBillingHandlerResult struct {
 	Tenants []TenantWithBilling `json:"tenants"`
 }
 
+// TODO: 重い
 // SaaS管理者用API
 // テナントごとの課金レポートを最大10件、テナントのid降順で取得する
 // GET /api/admin/tenants/billing
@@ -698,11 +742,18 @@ func tenantsBillingHandler(c echo.Context) error {
 			); err != nil {
 				return fmt.Errorf("failed to Select competition: %w", err)
 			}
+
+			reports, err := billingReports(ctx, tenantDB, t.ID)
+			if err != nil {
+				return fmt.Errorf("failed to billingReports: %w", err)
+			}
+
 			for _, comp := range cs {
-				report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
-				if err != nil {
+				report, ok := reports[comp.ID]
+				if !ok {
 					return fmt.Errorf("failed to billingReportByCompetition: %w", err)
 				}
+
 				tb.BillingYen += report.BillingYen
 			}
 			tenantBillings = append(tenantBillings, tb)
@@ -1063,6 +1114,7 @@ func competitionScoreHandler(c echo.Context) error {
 	defer fl.Close()
 	var rowNum int64
 	playerScoreRows := []PlayerScoreRow{}
+	// 参加者が存在するかどうかでN+1
 	for {
 		rowNum++
 		row, err := r.Read()
@@ -1118,18 +1170,15 @@ func competitionScoreHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Delete player_score: tenantID=%d, competitionID=%s, %w", v.tenantID, competitionID, err)
 	}
-	for _, ps := range playerScoreRows {
-		if _, err := tenantDB.NamedExecContext(
-			ctx,
-			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)",
-			ps,
-		); err != nil {
-			return fmt.Errorf(
-				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNum=%d, createdAt=%d, updatedAt=%d, %w",
-				ps.ID, ps.TenantID, ps.PlayerID, ps.CompetitionID, ps.Score, ps.RowNum, ps.CreatedAt, ps.UpdatedAt, err,
-			)
-
-		}
+	result, err := tenantDB.NamedExecContext(ctx,
+		"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)",
+		playerScoreRows,
+	)
+	c.Logger().Debugf("result: %#v", result)
+	if err != nil {
+		// "error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNum=%d, createdAt=%d, updatedAt=%d, %w"
+		// だったので、やばいかも？
+		return fmt.Errorf("error ExecContext player_score: %w", err)
 	}
 
 	return c.JSON(http.StatusOK, SuccessResult{
@@ -1171,11 +1220,18 @@ func billingHandler(c echo.Context) error {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
 	tbrs := make([]BillingReport, 0, len(cs))
+
+	reports, err := billingReports(ctx, tenantDB, v.tenantID)
+	if err != nil {
+		return fmt.Errorf("error billingReports: %w", err)
+	}
+
 	for _, comp := range cs {
-		report, err := billingReportByCompetition(ctx, tenantDB, v.tenantID, comp.ID)
-		if err != nil {
+		report, ok := reports[comp.ID]
+		if !ok {
 			return fmt.Errorf("error billingReportByCompetition: %w", err)
 		}
+
 		tbrs = append(tbrs, *report)
 	}
 
