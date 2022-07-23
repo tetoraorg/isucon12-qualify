@@ -734,7 +734,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			continue
 		}
 
-		if cnt > 10 {
+		if cnt >= 10 {
 			break
 		}
 		cnt++
