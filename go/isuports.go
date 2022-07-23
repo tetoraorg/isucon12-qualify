@@ -18,8 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/goccy/go-json"
-
 	"github.com/go-sql-driver/mysql"
 	"github.com/gofrs/flock"
 	"github.com/google/uuid"
@@ -34,6 +32,9 @@ import (
 	_ "net/http/pprof" // empty import
 
 	"github.com/felixge/fgprof"
+
+	"github.com/bytedance/sonic/decoder"
+	"github.com/bytedance/sonic/encoder"
 )
 
 const (
@@ -124,19 +125,16 @@ func SetCacheControlPrivate(next echo.HandlerFunc) echo.HandlerFunc {
 
 type JSONSerializer struct{}
 
-func (j *JSONSerializer) Serialize(c echo.Context, i interface{}, indent string) error {
-	enc := json.NewEncoder(c.Response())
-	return enc.Encode(i)
+func (j *JSONSerializer) Serialize(c echo.Context, i interface{}, _ string) error {
+	return encoder.NewStreamEncoder(c.Response()).Encode(i)
 }
 
 func (j *JSONSerializer) Deserialize(c echo.Context, i interface{}) error {
-	err := json.NewDecoder(c.Request().Body).Decode(i)
-	if ute, ok := err.(*json.UnmarshalTypeError); ok {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Unmarshal type error: expected=%v, got=%v, field=%v, offset=%v", ute.Type, ute.Value, ute.Field, ute.Offset)).SetInternal(err)
-	} else if se, ok := err.(*json.SyntaxError); ok {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Syntax error: offset=%v, error=%v", se.Offset, se.Error())).SetInternal(err)
-	}
-	return err
+	return decoder.NewStreamDecoder(c.Request().Body).Decode(i)
+}
+
+func setupJSONSerializer(e *echo.Echo) {
+	e.JSONSerializer = &JSONSerializer{}
 }
 
 // Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
