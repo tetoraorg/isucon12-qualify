@@ -32,8 +32,6 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 
 	_ "net/http/pprof" // empty import
-
-	"github.com/felixge/fgprof"
 )
 
 const (
@@ -142,16 +140,16 @@ func (j *JSONSerializer) Deserialize(c echo.Context, i interface{}) error {
 // Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
 func Run() {
 	// TODO: あとできる
-	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
-	go func() {
-		log.Print(http.ListenAndServe(":6060", nil))
-	}()
+	// http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
+	// go func() {
+	// 	log.Print(http.ListenAndServe(":6060", nil))
+	// }()
 
 	e := echo.New()
 	e.JSONSerializer = &JSONSerializer{}
 	// TODO: あとできる
-	e.Debug = true
-	e.Logger.SetLevel(log.DEBUG)
+	e.Debug = false
+	e.Logger.SetLevel(log.OFF)
 
 	var (
 		sqlLogger io.Closer
@@ -167,7 +165,7 @@ func Run() {
 	}
 	defer sqlLogger.Close()
 
-	e.Use(middleware.Logger())
+	// e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(SetCacheControlPrivate)
 
