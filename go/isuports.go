@@ -673,6 +673,17 @@ func tenantsBillingHandler(c echo.Context) error {
 	if err := adminDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id DESC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
+
+	allCs := []CompetitionRow{}
+	if err := adminDB.SelectContext(ctx, &allCs, "SELECT * FROM competition"); err != nil {
+		return fmt.Errorf("failed to Select competition: %w", err)
+	}
+
+	csByID := map[string][]CompetitionRow{}
+	for _, c := range allCs {
+		csByID[c.ID] = append(csByID[c.ID], c)
+	}
+
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	for _, t := range ts {
 		if beforeID != 0 && beforeID <= t.ID {
@@ -684,20 +695,20 @@ func tenantsBillingHandler(c echo.Context) error {
 				Name:        t.Name,
 				DisplayName: t.DisplayName,
 			}
+
+			// TODO: 逐一closeする必要ある？
 			tenantDB, err := connectToTenantDB(t.ID)
 			if err != nil {
 				return fmt.Errorf("failed to connectToTenantDB: %w", err)
 			}
 			defer tenantDB.Close()
-			cs := []CompetitionRow{}
-			if err := tenantDB.SelectContext(
-				ctx,
-				&cs,
-				"SELECT * FROM competition WHERE tenant_id=?",
-				t.ID,
-			); err != nil {
-				return fmt.Errorf("failed to Select competition: %w", err)
+
+			cs, ok := csByID[tb.ID]
+			if !ok {
+				// ignore
+				return nil
 			}
+
 			for _, comp := range cs {
 				report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
 				if err != nil {
