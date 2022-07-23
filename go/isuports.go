@@ -768,10 +768,12 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 
 	sort.Slice(tenantBillings, func(i, j int) bool {
-		return tenantBillings[i].ID < tenantBillings[j].ID
+		return tenantBillings[i].ID > tenantBillings[j].ID
 	})
 
-	tenantBillings = tenantBillings[:10]
+	if len(tenantBillings) > 10 {
+		tenantBillings = tenantBillings[:10]
+	}
 
 	return c.JSON(http.StatusOK, SuccessResult{
 		Status: true,
