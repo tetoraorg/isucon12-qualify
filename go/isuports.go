@@ -711,6 +711,12 @@ func tenantsBillingHandler(c echo.Context) error {
 
 		t := t
 		eg.Go(func() error {
+			select {
+			case <-egCtx.Done():
+				return nil
+			default:
+			}
+
 			tb := TenantWithBilling{
 				ID:          strconv.FormatInt(t.ID, 10),
 				Name:        t.Name,
