@@ -1446,13 +1446,13 @@ func competitionRankingHandler(c echo.Context) error {
 	ranks := make([]CompetitionRank, 0, len(pss))
 	scoredPlayerSet := make(map[string]struct{}, len(pss))
 
-	playerIDs := make([]string, 0, len(pss))
+	playerIDs := make([]interface{}, 0, len(pss))
 	for _, ps := range pss {
 		playerIDs = append(playerIDs, ps.PlayerID)
 	}
 
 	var ps []PlayerRow
-	if err := tenantDB.SelectContext(ctx, &ps, fmt.Sprintf("SELECT * FROM player WHERE player_id IN (%s)", strings.Join(playerIDs, ", "))); err != nil {
+	if err := tenantDB.SelectContext(ctx, &ps, fmt.Sprintf("SELECT * FROM player WHERE player_id IN (%s)", strings.Repeat("?", len(playerIDs))), playerIDs...); err != nil {
 		return fmt.Errorf("error Select players: %w", err)
 	}
 
