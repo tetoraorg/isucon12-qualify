@@ -2,6 +2,4 @@
 
 set -e
 
-sudo ln -sf $PROJECT_ROOT/fluent-bit /etc
-
-sudo systemctl restart fluent-bit
+sudo fluent-bit -c $PROJECT_ROOT/fluent-bit/fluent-bit.conf
