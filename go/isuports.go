@@ -700,7 +700,6 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
-	limitErr := errors.New("limit exceeded") // tenantBillingsが一定数に達したフラグ
 
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	tenantBillingsMux := sync.Mutex{}
@@ -763,7 +762,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		})
 	}
 
-	if err := eg.Wait(); err != nil && !errors.Is(err, limitErr) {
+	if err := eg.Wait(); err != nil {
 		return err
 	}
 
