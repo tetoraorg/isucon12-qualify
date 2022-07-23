@@ -105,6 +105,30 @@ func createTenantDB(id int64) error {
 	return nil
 }
 
+func waitDB(db *sqlx.DB) {
+	for {
+		err := db.Ping()
+		if err == nil {
+			return
+		}
+
+		log.Printf("Failed to ping DB: %s", err)
+		log.Printf("Retrying...")
+		time.Sleep(time.Second)
+	}
+}
+
+func pollDB(db *sqlx.DB) {
+	for {
+		err := db.Ping()
+		if err != nil {
+			log.Printf("Failed to ping DB: %s", err)
+		}
+
+		time.Sleep(time.Second)
+	}
+}
+
 // システム全体で一意なIDを生成する
 func dispenseID(ctx context.Context) (string, error) {
 	u, err := uuid.NewRandom()
@@ -141,6 +165,10 @@ func (j *JSONSerializer) Deserialize(c echo.Context, i interface{}) error {
 
 // Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
 func Run() {
+	// 再起動試験に耐える
+	waitDB(adminDB)
+	go pollDB(adminDB)
+
 	// TODO: あとできる
 	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
 	go func() {
