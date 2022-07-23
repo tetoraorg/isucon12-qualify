@@ -16,10 +16,22 @@ mysql -u"$ISUCON_DB_USER" \
 		--port "$ISUCON_DB_PORT" \
 		"$ISUCON_DB_NAME" < init.sql
 
-# SQLiteのデータベースを初期化
-rm -f ../tenant_db/*.db
-cp -r ../../initial_data/*.db ../tenant_db/
+mysql -u"$ISUCON_DB_USER" \
+		-p"$ISUCON_DB_PASSWORD" \
+		--host "$ISUCON_DB_HOST" \
+		--port "$ISUCON_DB_PORT" \
+		"$ISUCON_DB_NAME" < tenant/10_schema.sql
 
-for file in ../tenant_db/*.db; do
-	sqlite3 "$file" < init_sqlite3.sql
-done
+mysql -u"$ISUCON_DB_USER" \
+		-p"$ISUCON_DB_PASSWORD" \
+		--host "$ISUCON_DB_HOST" \
+		--port "$ISUCON_DB_PORT" \
+		"$ISUCON_DB_NAME" < tenant/tenants.sql
+
+# SQLiteのデータベースを初期化
+# rm -f ../tenant_db/*.db
+# cp -r ../../initial_data/*.db ../tenant_db/
+
+# for file in ../tenant_db/*.db; do
+# 	sqlite3 "$file" < init_sqlite3.sql
+# done
