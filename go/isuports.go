@@ -708,15 +708,15 @@ func tenantsBillingHandler(c echo.Context) error {
 			continue
 		}
 
+		select {
+		case <-egCtx.Done():
+			log.Error("tenantsBillingHandler: context canceled!!!!!!!!")
+			return nil
+		default:
+		}
+
 		t := t
 		eg.Go(func() error {
-			select {
-			case <-egCtx.Done():
-				log.Error("tenantsBillingHandler: context canceled!!!!!!!!")
-				return nil
-			default:
-			}
-
 			tb := TenantWithBilling{
 				ID:          strconv.FormatInt(t.ID, 10),
 				Name:        t.Name,
@@ -767,7 +767,10 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 
 	sort.Slice(tenantBillings, func(i, j int) bool {
-		return tenantBillings[i].ID > tenantBillings[j].ID
+		iID, _ := strconv.Atoi(tenantBillings[i].ID)
+		jID, _ := strconv.Atoi(tenantBillings[j].ID)
+
+		return iID > jID
 	})
 
 	if len(tenantBillings) > 10 {
