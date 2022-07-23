@@ -12,3 +12,6 @@ tenant_db
 java/
 node/
 sql/admin
+docker-compose-*.yml
+!docker-compose-go.yml
+
