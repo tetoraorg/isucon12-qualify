@@ -573,7 +573,12 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 
 	vhsByCompetitionID := make(map[string][]VisitHistorySummaryRow)
 	for _, vhs := range vhss {
-		vhsByCompetitionID[vhs.CompetitionID] = append(vhsByCompetitionID[vhs.CompetitionID], vhs)
+		v, ok := vhsByCompetitionID[vhs.CompetitionID]
+		if !ok {
+			v = []VisitHistorySummaryRow{}
+		}
+
+		vhsByCompetitionID[vhs.CompetitionID] = append(v, vhs)
 	}
 
 	// player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
@@ -599,7 +604,12 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 
 	scoredPlayerIDsByCompetitionID := make(map[string][]string)
 	for _, v := range scoredPlayerIDss {
-		scoredPlayerIDsByCompetitionID[v.CompetitionID] = append(scoredPlayerIDsByCompetitionID[v.CompetitionID], v.PlayerID)
+		ps, ok := scoredPlayerIDsByCompetitionID[v.CompetitionID]
+		if !ok {
+			ps = []string{}
+		}
+
+		scoredPlayerIDsByCompetitionID[v.CompetitionID] = append(ps, v.PlayerID)
 	}
 
 	for _, comp := range cs {
