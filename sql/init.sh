@@ -29,9 +29,9 @@ mysql -u"$ISUCON_DB_USER" \
 		"$ISUCON_DB_NAME" < tenant/tenants.sql
 
 # SQLiteのデータベースを初期化
-rm -f ../tenant_db/*.db
-cp -r ../../initial_data/*.db ../tenant_db/
+# rm -f ../tenant_db/*.db
+# cp -r ../../initial_data/*.db ../tenant_db/
 
-for file in ../tenant_db/*.db; do
-	sqlite3 "$file" < init_sqlite3.sql
-done
+# for file in ../tenant_db/*.db; do
+# 	sqlite3 "$file" < init_sqlite3.sql
+# done
