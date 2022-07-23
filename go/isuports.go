@@ -724,7 +724,7 @@ func tenantsBillingHandler(c echo.Context) error {
 
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	tenantBillingsMux := sync.Mutex{}
-	for _, t := range ts {
+	for _, t := range ts[:10] {
 		if beforeID != 0 && beforeID <= t.ID {
 			continue
 		}
@@ -793,10 +793,6 @@ func tenantsBillingHandler(c echo.Context) error {
 
 		return iID > jID
 	})
-
-	if len(tenantBillings) > 10 {
-		tenantBillings = tenantBillings[:10]
-	}
 
 	return c.JSON(http.StatusOK, SuccessResult{
 		Status: true,
