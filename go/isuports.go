@@ -730,12 +730,12 @@ func tenantsBillingHandler(c echo.Context) error {
 
 	cnt := 0
 	for _, t := range ts {
-		if cnt > 10 {
-			break
-		}
-
 		if beforeID != 0 && beforeID <= t.ID {
 			continue
+		}
+
+		if cnt > 10 {
+			break
 		}
 		cnt++
 
