@@ -15,7 +15,6 @@ Will
 
 set -x
 
-sudo systemctl stop fluent-bit
 restart-nginx
 restart-mysql && slow-off
 restart-app
