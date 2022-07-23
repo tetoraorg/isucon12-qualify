@@ -1328,7 +1328,7 @@ func playerHandler(c echo.Context) error {
 	}
 
 	var comps []CompetitionRow
-	if err := tenantDB.SelectContext(ctx, &comps, fmt.Sprintf("SELECT * FROM competition WHERE id IN (%s?)", strings.Repeat("?,", len(pssCompetitionIDs))), pssCompetitionIDs...); err != nil {
+	if err := tenantDB.SelectContext(ctx, &comps, fmt.Sprintf("SELECT * FROM competition WHERE id IN (%s?)", strings.Repeat("?,", len(pssCompetitionIDs)-1)), pssCompetitionIDs...); err != nil {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
 
