@@ -1452,7 +1452,7 @@ func competitionRankingHandler(c echo.Context) error {
 	}
 
 	var ps []PlayerRow
-	if err := tenantDB.SelectContext(ctx, &ps, fmt.Sprintf("SELECT * FROM player IN (%s)", strings.Join(playerIDs, ", "))); err != nil {
+	if err := tenantDB.SelectContext(ctx, &ps, fmt.Sprintf("SELECT * FROM player WHERE player_id IN (%s)", strings.Join(playerIDs, ", "))); err != nil {
 		return fmt.Errorf("error Select players: %w", err)
 	}
 
