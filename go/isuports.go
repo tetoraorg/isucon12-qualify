@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -28,6 +29,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"golang.org/x/sync/errgroup"
 
 	_ "net/http/pprof" // empty import
 
@@ -696,53 +698,68 @@ func tenantsBillingHandler(c echo.Context) error {
 	if err := adminDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id DESC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
+
+	eg, egCtx := errgroup.WithContext(ctx)
+
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
+	tenantBillingsMux := sync.Mutex{}
 	for _, t := range ts {
-		if beforeID != 0 && beforeID <= t.ID {
-			continue
-		}
-		err := func(t TenantRow) error {
-			tb := TenantWithBilling{
-				ID:          strconv.FormatInt(t.ID, 10),
-				Name:        t.Name,
-				DisplayName: t.DisplayName,
+		t := t
+		eg.Go(func() error {
+			if beforeID != 0 && beforeID <= t.ID {
+				return nil
 			}
-			tenantDB, err := connectToTenantDB(t.ID)
-			if err != nil {
-				return fmt.Errorf("failed to connectToTenantDB: %w", err)
-			}
-			defer tenantDB.Close()
-			cs := []CompetitionRow{}
-			if err := tenantDB.SelectContext(
-				ctx,
-				&cs,
-				"SELECT * FROM competition WHERE tenant_id=?",
-				t.ID,
-			); err != nil {
-				return fmt.Errorf("failed to Select competition: %w", err)
-			}
-
-			reports, err := billingReports(ctx, tenantDB, t.ID)
-			if err != nil {
-				return fmt.Errorf("failed to billingReports: %w", err)
-			}
-
-			for _, comp := range cs {
-				report, ok := reports[comp.ID]
-				if !ok {
-					return fmt.Errorf("failed to billingReportByCompetition: %w", err)
+			err := func(t TenantRow) error {
+				tb := TenantWithBilling{
+					ID:          strconv.FormatInt(t.ID, 10),
+					Name:        t.Name,
+					DisplayName: t.DisplayName,
+				}
+				tenantDB, err := connectToTenantDB(t.ID)
+				if err != nil {
+					return fmt.Errorf("failed to connectToTenantDB: %w", err)
+				}
+				defer tenantDB.Close()
+				cs := []CompetitionRow{}
+				if err := tenantDB.SelectContext(
+					egCtx,
+					&cs,
+					"SELECT * FROM competition WHERE tenant_id=?",
+					t.ID,
+				); err != nil {
+					return fmt.Errorf("failed to Select competition: %w", err)
 				}
 
-				tb.BillingYen += report.BillingYen
+				reports, err := billingReports(egCtx, tenantDB, t.ID)
+				if err != nil {
+					return fmt.Errorf("failed to billingReports: %w", err)
+				}
+
+				for _, comp := range cs {
+					report, ok := reports[comp.ID]
+					if !ok {
+						return fmt.Errorf("failed to billingReportByCompetition: %w", err)
+					}
+
+					tb.BillingYen += report.BillingYen
+				}
+				tenantBillingsMux.Lock()
+				tenantBillings = append(tenantBillings, tb)
+				tenantBillingsMux.Unlock()
+				return nil
+			}(t)
+			if err != nil {
+				return err
 			}
-			tenantBillings = append(tenantBillings, tb)
+			if len(tenantBillings) >= 10 {
+				return nil
+			}
+
 			return nil
-		}(t)
-		if err != nil {
+		})
+
+		if err := eg.Wait(); err != nil {
 			return err
-		}
-		if len(tenantBillings) >= 10 {
-			break
 		}
 	}
 	return c.JSON(http.StatusOK, SuccessResult{
