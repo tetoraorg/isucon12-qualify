@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -e
+
+echo "
+Check list
+- pprofを切る
+- goのログを切る
+- goのDB待ち
+Will
+- fluent-bitを切る
+- slow-query-logを切る
+- ソースコードのビルド
+"
+
+set -x
+
+sudo systemctl stop fluent-bit
+restart-nginx
+restart-mysql && slow-off
+restart-app

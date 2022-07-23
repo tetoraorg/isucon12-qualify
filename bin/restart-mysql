@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -e
+
+if [ -s /tmp/slow.log ]; then
+  echo "moving mysql/slow.log..."
+  if [ ! -d ~/log/mysql ]; then
+    mkdir -p ~/log/mysql
+  fi
+  sudo mv /tmp/slow.log ~/log/mysql/slow.log_$(date "+%Y%m%d-%H%M%S")
+fi
+
+sync-mysql
+
+sudo systemctl restart mysql

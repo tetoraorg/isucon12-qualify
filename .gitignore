@@ -1,0 +1,14 @@
+sqlite-trace.log
+deno/
+.vscode/
+python/
+rust/
+php/
+perl/
+nodejs/
+ruby/
+frontend/
+tenant_db
+java/
+node/
+sql/admin
