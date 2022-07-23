@@ -1460,9 +1460,9 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error Select players: %w", err)
 	}
 
-	PlayerRowByPlayerID := make(map[string]*PlayerRow, len(ps))
+	PlayerRowByPlayerID := make(map[string]PlayerRow, len(ps))
 	for _, p := range ps {
-		PlayerRowByPlayerID[p.ID] = &p
+		PlayerRowByPlayerID[p.ID] = p
 	}
 
 	for _, ps := range pss {
