@@ -563,7 +563,7 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 	if err := adminDB.SelectContext(
 		ctx,
 		&vhss,
-		"SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND GROUP BY player_id",
+		"SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? GROUP BY player_id",
 		tenantID,
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select visit_history: tenantID=%d, competitionID, %w", tenantID, err)
