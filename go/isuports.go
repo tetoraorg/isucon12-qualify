@@ -713,6 +713,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		eg.Go(func() error {
 			select {
 			case <-egCtx.Done():
+				log.Error("tenantsBillingHandler: context canceled!!!!!!!!")
 				return nil
 			default:
 			}
@@ -763,11 +764,16 @@ func tenantsBillingHandler(c echo.Context) error {
 
 			return nil
 		})
-
-		if err := eg.Wait(); err != nil && !errors.Is(err, limitErr) {
-			return err
-		}
 	}
+
+	if err := eg.Wait(); err != nil && !errors.Is(err, limitErr) {
+		return err
+	}
+
+	sort.Slice(tenantBillings, func(i, j int) bool {
+		return tenantBillings[i].ID < tenantBillings[j].ID
+	})
+
 	return c.JSON(http.StatusOK, SuccessResult{
 		Status: true,
 		Data: TenantsBillingHandlerResult{
