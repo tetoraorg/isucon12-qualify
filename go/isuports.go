@@ -550,6 +550,7 @@ type VisitHistorySummaryRow struct {
 	CompetitionID string `db:"competition_id"`
 }
 
+// 大会ごとの課金レポートをまとめて計算する
 func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[string]*BillingReport, error) {
 	var reports = make(map[string]*BillingReport)
 
@@ -609,7 +610,6 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 		if err != nil {
 			return nil, fmt.Errorf("error flockByTenantID: %w", err)
 		}
-		defer fl.Close()
 
 		// スコアを登録した参加者のIDを取得する
 		scoredPlayerIDs, ok := scoredPlayerIDsByCompetitionID[comp.ID]
@@ -644,6 +644,8 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 			BillingVisitorYen: 10 * visitorCount, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
 			BillingYen:        100*playerCount + 10*visitorCount,
 		}
+
+		fl.Close()
 	}
 
 	return reports, nil
