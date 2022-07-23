@@ -1307,8 +1307,8 @@ func playerHandler(c echo.Context) error {
 	}
 	pss := make([]PlayerScoreRow, 0, len(cs))
 	query := `
-		SELECT s.* FROM player_score AS s JOIN 
-		(SELECT MAX(row_num) AS num, competition_id FROM player_score WHERE tenant_id = ? AND player_id = ? GROUP BY competition_id) AS t 
+		SELECT s.* FROM player_score AS s JOIN
+		(SELECT MAX(row_num) AS num, competition_id FROM player_score WHERE tenant_id = ? AND player_id = ? GROUP BY competition_id) AS t
 		ON s.competition_id = t.competition_id AND s.row_num = t.num  WHERE tenant_id = ? AND player_id = ?
 	`
 	err = tenantDB.SelectContext(ctx, &pss, query, v.tenantID, p.ID, v.tenantID, p.ID)
@@ -1318,13 +1318,28 @@ func playerHandler(c echo.Context) error {
 	}
 	fl.Close()
 
-	// N+1
+	pssCompetitionIDs := make([]interface{}, 0, len(cs))
+	for _, ps := range pss {
+		pssCompetitionIDs = append(pssCompetitionIDs, ps.CompetitionID)
+	}
+
+	var comps []CompetitionRow
+	if err := tenantDB.SelectContext(ctx, &comps, fmt.Sprintf("SELECT * FROM competition WHERE id IN (%s?)", strings.Repeat("?,", len(pssCompetitionIDs))), pssCompetitionIDs...); err != nil {
+		return fmt.Errorf("error Select competition: %w", err)
+	}
+
+	compsByID := make(map[string]CompetitionRow)
+	for _, comp := range comps {
+		compsByID[comp.ID] = comp
+	}
+
 	psds := make([]PlayerScoreDetail, 0, len(pss))
 	for _, ps := range pss {
-		comp, err := retrieveCompetition(ctx, tenantDB, ps.CompetitionID)
-		if err != nil {
+		comp, ok := compsByID[ps.CompetitionID]
+		if !ok {
 			return fmt.Errorf("error retrieveCompetition: %w", err)
 		}
+
 		psds = append(psds, PlayerScoreDetail{
 			CompetitionTitle: comp.Title,
 			Score:            ps.Score,
