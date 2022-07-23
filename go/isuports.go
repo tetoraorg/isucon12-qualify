@@ -28,7 +28,8 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 
-	_ "net/http/pprof"
+	_ "net/http/pprof" // empty import
+
 	"github.com/felixge/fgprof"
 )
 
@@ -213,12 +214,12 @@ func errorResponseHandler(err error, c echo.Context) {
 	c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
 	var he *echo.HTTPError
 	if errors.As(err, &he) {
-		c.JSON(he.Code, FailureResult{
+		_ = c.JSON(he.Code, FailureResult{
 			Status: false,
 		})
 		return
 	}
-	c.JSON(http.StatusInternalServerError, FailureResult{
+	_ = c.JSON(http.StatusInternalServerError, FailureResult{
 		Status: false,
 	})
 }
