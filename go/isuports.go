@@ -728,14 +728,16 @@ func tenantsBillingHandler(c echo.Context) error {
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	tenantBillingsMux := sync.Mutex{}
 
-	if len(ts) > 10 {
-		ts = ts[:10]
-	}
-
+	cnt := 0
 	for _, t := range ts {
+		if cnt > 10 {
+			break
+		}
+
 		if beforeID != 0 && beforeID <= t.ID {
 			continue
 		}
+		cnt++
 
 		select {
 		case <-egCtx.Done():
