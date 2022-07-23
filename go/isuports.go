@@ -704,11 +704,12 @@ func tenantsBillingHandler(c echo.Context) error {
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	tenantBillingsMux := sync.Mutex{}
 	for _, t := range ts {
+		if beforeID != 0 && beforeID <= t.ID {
+			continue
+		}
+
 		t := t
 		eg.Go(func() error {
-			if beforeID != 0 && beforeID <= t.ID {
-				return nil
-			}
 			tb := TenantWithBilling{
 				ID:          strconv.FormatInt(t.ID, 10),
 				Name:        t.Name,
