@@ -218,7 +218,10 @@ func Run() {
 
 // エラー処理関数
 func errorResponseHandler(err error, c echo.Context) {
-	// c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
+	if c.Response().Status/100 == 5 {
+		c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
+	}
+
 	var he *echo.HTTPError
 	if errors.As(err, &he) {
 		_ = c.JSON(he.Code, FailureResult{
@@ -725,7 +728,7 @@ func tenantsBillingHandler(c echo.Context) error {
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	tenantBillingsMux := sync.Mutex{}
 
-	if len(ts) > 10{
+	if len(ts) > 10 {
 		ts = ts[:10]
 	}
 
