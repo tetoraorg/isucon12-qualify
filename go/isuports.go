@@ -585,16 +585,14 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, %w", tenantID, err)
 	}
 
-	scoredPlayerIDsByCompetitionID := make(map[string][]string)
+	scoredPlayerIDsByPlayerID := make(map[string][]string)
 	for _, playerID := range scoredPlayerIDss {
-		scoredPlayerIDsByCompetitionID[playerID] = append(scoredPlayerIDsByCompetitionID[playerID], playerID)
+		scoredPlayerIDsByPlayerID[playerID] = append(scoredPlayerIDsByPlayerID[playerID], playerID)
 	}
 
 	for _, comp := range cs {
-		vhs, ok := vhsByCompetitionID[comp.ID]
-		if !ok {
-			continue
-		}
+		// 存在確認はしない
+		vhs := vhsByCompetitionID[comp.ID]
 
 		billingMap := map[string]string{}
 		for _, vh := range vhs {
@@ -612,10 +610,8 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 		}
 
 		// スコアを登録した参加者のIDを取得する
-		scoredPlayerIDs, ok := scoredPlayerIDsByCompetitionID[comp.ID]
-		if !ok {
-			continue
-		}
+		// 存在確認はしない
+		scoredPlayerIDs := scoredPlayerIDsByPlayerID[comp.ID]
 
 		for _, pid := range scoredPlayerIDs {
 			// スコアが登録されている参加者
