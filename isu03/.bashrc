@@ -127,13 +127,13 @@ export GOPATH=""
 export GOROOT=""
 source ~/.asdf/asdf.sh
 source ~/.asdf/completions/asdf.bash
-PROJECT_ROOT=/home/isucon/webapp
-REPO_SSH_URL=git@github.com:tetoraorg/isucon12-qualify.git
-APP_NAME=isuports
-SERVICE_NAME=isuports.service
-DASHBOARD_HOST=153.127.197.150
-SERVER_ENV_PATH=/home/isucon/env.sh
-SERVER_NUMBER=03
+export PROJECT_ROOT=/home/isucon/webapp
+export REPO_SSH_URL=git@github.com:tetoraorg/isucon12-qualify.git
+export APP_NAME=isuports
+export SERVICE_NAME=isuports.service
+export DASHBOARD_HOST=153.127.197.150
+export SERVER_ENV_PATH=/home/isucon/env.sh
+export SERVER_NUMBER=03
 export PATH=/home/isucon/webapp/bin:$PATH
 export GOPATH=""
 export GOROOT=""
