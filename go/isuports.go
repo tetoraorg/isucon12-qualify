@@ -557,6 +557,7 @@ type VisitHistorySummaryRow struct {
 
 // 大会ごとの課金レポートをまとめて計算する
 func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[string]*BillingReport, error) {
+	log.Print(tenantID)
 	var reports = make(map[string]*BillingReport)
 
 	var cs []CompetitionRow
