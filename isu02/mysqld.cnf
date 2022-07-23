@@ -122,3 +122,5 @@ max_allowed_packet = 32505856
 disable-log-bin
 bulk_insert_buffer_size=32MB
 # skip-name-resolve=1
+tmp_table_size=256MB
+max_heap_table_size=256MB
