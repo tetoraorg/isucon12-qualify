@@ -564,12 +564,11 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 	if err := adminDB.SelectContext(
 		ctx,
 		&vhss,
-		"SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? GROUP BY player_id",
+		"SELECT player_id, competition_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? GROUP BY player_id, competition_id",
 		tenantID,
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select visit_history: tenantID=%d, competitionID, %w", tenantID, err)
 	}
-	log.Error("len(vhss)", len(vhss))
 
 	vhsByCompetitionID := make(map[string][]VisitHistorySummaryRow)
 	for _, vhs := range vhss {
@@ -600,7 +599,6 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, %w", tenantID, err)
 	}
-	log.Error("len(scoredPlayerIDs)", len(scoredPlayerIDss))
 
 	scoredPlayerIDsByCompetitionID := make(map[string][]string)
 	for _, v := range scoredPlayerIDss {
