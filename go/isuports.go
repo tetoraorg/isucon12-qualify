@@ -569,12 +569,19 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select visit_history: tenantID=%d, competitionID, %w", tenantID, err)
 	}
-	log.Debug("len(vhss)", len(vhss))
+	log.Error("len(vhss)", len(vhss))
 
 	vhsByCompetitionID := make(map[string][]VisitHistorySummaryRow)
 	for _, vhs := range vhss {
 		vhsByCompetitionID[vhs.CompetitionID] = append(vhsByCompetitionID[vhs.CompetitionID], vhs)
 	}
+
+	// player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+	fl, err := flockByTenantID(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("error flockByTenantID: %w", err)
+	}
+	defer fl.Close()
 
 	scoredPlayerIDss := []struct {
 		PlayerID      string `db:"player_id"`
@@ -588,7 +595,7 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, %w", tenantID, err)
 	}
-	log.Debug("len(scoredPlayerIDs)", len(scoredPlayerIDss))
+	log.Error("len(scoredPlayerIDs)", len(scoredPlayerIDss))
 
 	scoredPlayerIDsByCompetitionID := make(map[string][]string)
 	for _, v := range scoredPlayerIDss {
@@ -606,12 +613,6 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 				continue
 			}
 			billingMap[vh.PlayerID] = "visitor"
-		}
-
-		// player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-		fl, err := flockByTenantID(tenantID)
-		if err != nil {
-			return nil, fmt.Errorf("error flockByTenantID: %w", err)
 		}
 
 		// スコアを登録した参加者のIDを取得する
@@ -645,8 +646,6 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 			BillingVisitorYen: 10 * visitorCount, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
 			BillingYen:        100*playerCount + 10*visitorCount,
 		}
-
-		fl.Close()
 	}
 
 	return reports, nil
