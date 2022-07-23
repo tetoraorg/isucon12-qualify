@@ -575,19 +575,22 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 		vhsByCompetitionID[vhs.CompetitionID] = append(vhsByCompetitionID[vhs.CompetitionID], vhs)
 	}
 
-	scoredPlayerIDss := []string{}
+	scoredPlayerIDss := []struct {
+		PlayerID      string `db:"player_id"`
+		CompetitionID string `db:"competition_id"`
+	}{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&scoredPlayerIDss,
-		"SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ?",
+		"SELECT DISTINCT(player_id) AS player_id, competition_id FROM player_score WHERE tenant_id = ?",
 		tenantID,
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, %w", tenantID, err)
 	}
 
-	scoredPlayerIDsByPlayerID := make(map[string][]string)
-	for _, playerID := range scoredPlayerIDss {
-		scoredPlayerIDsByPlayerID[playerID] = append(scoredPlayerIDsByPlayerID[playerID], playerID)
+	scoredPlayerIDsByCompetitionID := make(map[string][]string)
+	for _, v := range scoredPlayerIDss {
+		scoredPlayerIDsByCompetitionID[v.CompetitionID] = append(scoredPlayerIDsByCompetitionID[v.CompetitionID], v.PlayerID)
 	}
 
 	for _, comp := range cs {
@@ -611,7 +614,7 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 
 		// スコアを登録した参加者のIDを取得する
 		// 存在確認はしない
-		scoredPlayerIDs := scoredPlayerIDsByPlayerID[comp.ID]
+		scoredPlayerIDs := scoredPlayerIDsByCompetitionID[comp.ID]
 
 		for _, pid := range scoredPlayerIDs {
 			// スコアが登録されている参加者
