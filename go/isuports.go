@@ -579,6 +579,7 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 		ctx,
 		&scoredPlayerIDss,
 		"SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ?",
+		tenantID,
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, %w", tenantID, err)
 	}
