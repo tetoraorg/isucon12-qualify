@@ -724,7 +724,12 @@ func tenantsBillingHandler(c echo.Context) error {
 
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	tenantBillingsMux := sync.Mutex{}
-	for _, t := range ts[:10] {
+
+	if len(ts) > 10{
+		ts = ts[:10]
+	}
+
+	for _, t := range ts {
 		if beforeID != 0 && beforeID <= t.ID {
 			continue
 		}
