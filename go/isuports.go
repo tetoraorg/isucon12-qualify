@@ -11,12 +11,14 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -227,6 +229,20 @@ func Run() {
 		if err != nil {
 			e.Logger.Fatal(err)
 		}
+
+		closeFunc := func() {
+			l.Close()
+			os.Remove(socket_file)
+			os.Exit(0)
+		}
+
+		s := make(chan os.Signal, 1)
+		signal.Notify(s, os.Interrupt, os.Kill, syscall.SIGTERM)
+		go func(s chan os.Signal) {
+			<-s
+			closeFunc()
+		}(s)
+		defer closeFunc()
 
 		e.Listener = l
 		e.Logger.Fatal(e.Start(""))
