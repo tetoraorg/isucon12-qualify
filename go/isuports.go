@@ -716,6 +716,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			}
 			tenantDB, err := connectToTenantDB(t.ID)
 			if err != nil {
+				log.Print(err)
 				return fmt.Errorf("failed to connectToTenantDB: %w", err)
 			}
 			defer tenantDB.Close()
@@ -726,17 +727,20 @@ func tenantsBillingHandler(c echo.Context) error {
 				"SELECT * FROM competition WHERE tenant_id=?",
 				t.ID,
 			); err != nil {
+				log.Print(err)
 				return fmt.Errorf("failed to Select competition: %w", err)
 			}
 
 			reports, err := billingReports(egCtx, tenantDB, t.ID)
 			if err != nil {
+				log.Print(err)
 				return fmt.Errorf("failed to billingReports: %w", err)
 			}
 
 			for _, comp := range cs {
 				report, ok := reports[comp.ID]
 				if !ok {
+					log.Print(err)
 					return fmt.Errorf("failed to billingReportByCompetition: %w", err)
 				}
 
@@ -744,11 +748,10 @@ func tenantsBillingHandler(c echo.Context) error {
 			}
 			tenantBillingsMux.Lock()
 			tenantBillings = append(tenantBillings, tb)
-			tenantBillingsMux.Unlock()
-
 			if len(tenantBillings) >= 10 {
 				return nil
 			}
+			tenantBillingsMux.Unlock()
 
 			return nil
 		})
