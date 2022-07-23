@@ -738,7 +738,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			for _, comp := range cs {
 				report, ok := reports[comp.ID]
 				if !ok {
-					continue
+					return fmt.Errorf("failed to billingReportByCompetition: %w", err)
 				}
 
 				tb.BillingYen += report.BillingYen
@@ -1218,7 +1218,7 @@ func billingHandler(c echo.Context) error {
 	for _, comp := range cs {
 		report, ok := reports[comp.ID]
 		if !ok {
-			continue
+			return fmt.Errorf("error billingReportByCompetition: %w", err)
 		}
 
 		tbrs = append(tbrs, *report)
