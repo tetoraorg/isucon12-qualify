@@ -1307,9 +1307,8 @@ func playerHandler(c echo.Context) error {
 	}
 	pss := make([]PlayerScoreRow, 0, len(cs))
 	query := `
-		SELECT * FROM player_score AS s JOIN 
-		(SELECT MAX(row_num) AS num, competition_id FROM player_score WHERE tenant_id = ? AND player_id = ? GROUP BY competition_id) AS t 
-		ON s.competition_id = t.competition_id AND s.row_num = t.num  WHERE tenant_id = ? AND player_id = ?
+		SELECT * FROM player_score AS s WHERE tenant_id = ? AND player_id = ? AND IN 
+		(SELECT MAX(row_num) AS num, competition_id FROM player_score WHERE tenant_id = ? AND player_id = ? GROUP BY competition_id)
 	`
 	err = tenantDB.SelectContext(ctx, &pss, query, v.tenantID, p.ID, v.tenantID, p.ID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
