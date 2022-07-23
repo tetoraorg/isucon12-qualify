@@ -699,7 +699,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 
-	eg, egCtx := errgroup.WithContext(ctx)
+	eg := errgroup.Group{}
 
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	tenantBillingsMux := sync.Mutex{}
@@ -716,32 +716,32 @@ func tenantsBillingHandler(c echo.Context) error {
 			}
 			tenantDB, err := connectToTenantDB(t.ID)
 			if err != nil {
-				log.Print(err)
+				log.Error("tenantsBillingHandler:", err)
 				return fmt.Errorf("failed to connectToTenantDB: %w", err)
 			}
 			defer tenantDB.Close()
 			cs := []CompetitionRow{}
 			if err := tenantDB.SelectContext(
-				egCtx,
+				ctx,
 				&cs,
 				"SELECT * FROM competition WHERE tenant_id=?",
 				t.ID,
 			); err != nil {
-				log.Print(err)
+				log.Error("tenantsBillingHandler:", err)
 				return fmt.Errorf("failed to Select competition: %w", err)
 			}
 
-			reports, err := billingReports(egCtx, tenantDB, t.ID)
+			reports, err := billingReports(ctx, tenantDB, t.ID)
 			if err != nil {
-				log.Print(err)
+				log.Error("tenantsBillingHandler:", err)
 				return fmt.Errorf("failed to billingReports: %w", err)
 			}
 
 			for _, comp := range cs {
 				report, ok := reports[comp.ID]
 				if !ok {
-					log.Print(err)
-					return fmt.Errorf("failed to billingReportByCompetition: %w", err)
+					log.Error("tenantsBillingHandler: competition not found")
+					return fmt.Errorf("failed to billingReportByCompetition: competition not found")
 				}
 
 				tb.BillingYen += report.BillingYen
