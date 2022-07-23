@@ -27,6 +27,9 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+
+	_ "net/http/pprof"
+	"github.com/felixge/fgprof"
 )
 
 const (
@@ -133,7 +136,14 @@ func SetCacheControlPrivate(next echo.HandlerFunc) echo.HandlerFunc {
 
 // Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
 func Run() {
+	// TODO: あとできる
+	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
+	go func() {
+		log.Print(http.ListenAndServe(":6060", nil))
+	}()
+
 	e := echo.New()
+	// TODO: あとできる
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
 

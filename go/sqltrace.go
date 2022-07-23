@@ -84,7 +84,7 @@ func traceLogPostExec(_ context.Context, ctx interface{}, stmt *proxy.Stmt, args
 	return nil
 }
 
-func traceLogPostQuery(_ context.Context, ctx interface{}, stmt *proxy.Stmt, args []driver.NamedValue, result driver.Rows, _ error) error {
+func traceLogPostQuery(_ context.Context, ctx interface{}, stmt *proxy.Stmt, args []driver.NamedValue, _ driver.Rows, _ error) error {
 	if traceLogEncoder == nil {
 		return nil
 	}
