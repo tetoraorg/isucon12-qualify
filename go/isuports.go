@@ -569,6 +569,7 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select visit_history: tenantID=%d, competitionID, %w", tenantID, err)
 	}
+	log.Debug("len(vhss)", len(vhss))
 
 	vhsByCompetitionID := make(map[string][]VisitHistorySummaryRow)
 	for _, vhs := range vhss {
@@ -587,6 +588,7 @@ func billingReports(ctx context.Context, tenantDB dbOrTx, tenantID int64) (map[s
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, %w", tenantID, err)
 	}
+	log.Debug("len(scoredPlayerIDs)", len(scoredPlayerIDss))
 
 	scoredPlayerIDsByCompetitionID := make(map[string][]string)
 	for _, v := range scoredPlayerIDss {
